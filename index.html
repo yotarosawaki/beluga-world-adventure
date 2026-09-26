@@ -49,6 +49,22 @@
   body.touch #btnFull.can{display:flex}
   #btnMute.off{opacity:.5;text-decoration:line-through}
 
+  /* ---- ランキング登録 ---- */
+  #entry{display:none;position:fixed;inset:0;z-index:30;background:rgba(4,16,40,.62);align-items:flex-start;justify-content:center;
+    padding-top:max(3vh,8px);touch-action:manipulation}
+  #entry .box{background:#fff;border:4px solid #6fa8d6;border-radius:18px;padding:12px 18px 14px;width:min(86vw,340px);text-align:center;color:#24507f;font-weight:800;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  #entry .ttl{font-size:16px;margin:0 0 4px}
+  #entry .sc{font-size:14px;margin:0 0 8px;color:#e4741a}
+  #entry .sc b{font-size:22px}
+  #entry input{width:100%;box-sizing:border-box;font-size:16px;font-weight:700;padding:9px 12px;border:3px solid #9cc4e4;border-radius:12px;text-align:center;color:#24507f;outline:none;
+    -webkit-user-select:text;user-select:text;font-family:inherit}
+  #entry input:focus{border-color:#ff9a1a}
+  #entry .note{font-size:11px;color:#c0392b;margin:6px 0 10px}
+  #entry .btns{display:flex;gap:10px;justify-content:center}
+  #entry button{font-family:inherit;font-size:15px;font-weight:800;border:0;border-radius:22px;padding:9px 20px;cursor:pointer;touch-action:manipulation}
+  #entry #ok{background:#ffd23f;color:#7a3a00;box-shadow:0 3px 0 #e0a010}
+  #entry #skip{background:#e6eef7;color:#5a7896}
+
   /* ---- 縦向き警告 ---- */
   #rot{display:none;position:fixed;inset:0;z-index:20;background:#0b1d33;color:#fff;text-align:center;
     align-items:center;justify-content:center;flex-direction:column;font-size:20px;font-weight:800}
@@ -72,7 +88,16 @@
 <div class="sys" id="btnMute">♪</div>
 <div class="sys" id="btnPause">II</div>
 <div id="rot"><div class="ph">📱</div><div style="margin-top:14px">スマホを よこむきにしてね</div></div>
+<div id="entry"><div class="box">
+  <p class="ttl" id="entryTitle">ランキングに登録しよう！</p>
+  <p class="sc">スコア <b id="entryScore">0</b></p>
+  <input id="name" maxlength="8" placeholder="ニックネーム（8文字まで）" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <p class="note">※ ほんとうの名前は いれないでね</p>
+  <div class="btns"><button id="ok">とうろく</button><button id="skip">やめる</button></div>
+</div></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -283,12 +308,14 @@ function release(n){inp.h[n]=false;}
 function clearEdges(){inp.p={};}
 const KEYMAP={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',
   Space:'a',KeyZ:'a',KeyK:'a',Enter:'a',KeyX:'b',KeyJ:'b',ShiftLeft:'b',ShiftRight:'b',Escape:'pause',KeyP:'pause'};
+const inField=e=>e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA');
 addEventListener('keydown',e=>{
   Snd.resume();
+  if(inField(e))return;   // 名前入力中はゲーム操作にしない
   if(e.code==='KeyM'){Snd.setMute(!Snd.muted);return;}
   const n=KEYMAP[e.code];if(n){e.preventDefault();if(!e.repeat){press(n);if(n==='up')press('kup');}}
 });
-addEventListener('keyup',e=>{const n=KEYMAP[e.code];if(n){e.preventDefault();release(n);if(n==='up')release('kup');}});
+addEventListener('keyup',e=>{if(inField(e))return;const n=KEYMAP[e.code];if(n){e.preventDefault();release(n);if(n==='up')release('kup');}});
 addEventListener('blur',()=>{inp.h={};});
 
 /* スマホのタッチ操作 */
@@ -329,15 +356,18 @@ addEventListener('blur',()=>{inp.h={};});
     apply(n);
   }
   const onSys=t=>t.target&&t.target.closest&&t.target.closest('.sys');
+  const inEntry=e=>e.target&&e.target.closest&&e.target.closest('#entry');   // 名前入力の画面はふつうにタッチできるように
   document.addEventListener('touchstart',e=>{
+    if(inEntry(e))return;
     body.classList.add('touch');Snd.resume();
     for(const t of e.changedTouches){if(onSys(t))continue;
       if(inRect(dp,t.clientX,t.clientY,34))owner.set(t.identifier,'dpad');
       else if(btnAt(t.clientX,t.clientY,24))owner.set(t.identifier,'btn');}
     recompute(e.touches);e.preventDefault();
   },{passive:false});
-  document.addEventListener('touchmove',e=>{recompute(e.touches);e.preventDefault();},{passive:false});
+  document.addEventListener('touchmove',e=>{if(inEntry(e))return;recompute(e.touches);e.preventDefault();},{passive:false});
   const tEnd=e=>{
+    if(inEntry(e))return;
     for(const t of e.changedTouches)owner.delete(t.identifier);
     for(const id of[...owner.keys()])if(![...e.touches].some(t=>t.identifier===id))owner.delete(id);
     recompute(e.touches);Snd.resume();
@@ -345,7 +375,8 @@ addEventListener('blur',()=>{inp.h={};});
   };
   document.addEventListener('touchend',tEnd,{passive:false});
   document.addEventListener('touchcancel',tEnd,{passive:false});
-  ['gesturestart','gesturechange','gestureend','dblclick'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+  ['gesturestart','gesturechange','gestureend'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+  document.addEventListener('dblclick',e=>{if(!inEntry(e))e.preventDefault();});
   const releaseAll=()=>{owner.clear();apply({left:false,right:false,up:false,down:false,a:false,b:false});};
   addEventListener('blur',releaseAll);document.addEventListener('visibilitychange',releaseAll);
   /* --- マウス（PCで ?touch 表示にしたとき用） --- */
@@ -568,17 +599,89 @@ let selStage=0;
 function setState(s){state=s;stTimer=0;clearEdges();}
 function setMenu(items){menu={items,sel:0};}
 
+/* =====================================================================
+   ランキング
+   FIREBASE_CONFIG を設定すると「みんなのランキング」（Firestore）に、
+   未設定・通信できないときは、この端末だけのランキングになる。
+   ===================================================================== */
+const FIREBASE_CONFIG={
+  apiKey:"YOUR_API_KEY",
+  authDomain:"YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:"YOUR_PROJECT_ID"
+};
+const FIREBASE_ON=!!(FIREBASE_CONFIG.apiKey&&!FIREBASE_CONFIG.apiKey.startsWith('YOUR_')&&window.firebase);
+let db=null;
+if(FIREBASE_ON){try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.firestore();}catch(e){db=null;}}
+const RANK_KEY='beluga-world-adventure-ranking',NAME_KEY='beluga-world-adventure-name',RANK_MAX=10;
+let ranking=[],rankLoading=false,rankError='',lastRank=-1,rankFrom='title',entryActive=false,entryDone=null;
+function loadLocalRanking(){try{ranking=JSON.parse(localStorage.getItem(RANK_KEY))||[];}catch(e){ranking=[];}}
+function saveLocalRanking(list){try{localStorage.setItem(RANK_KEY,JSON.stringify(list));}catch(e){}}
+loadLocalRanking();
+async function refreshRanking(){
+  if(!db)return;
+  rankLoading=true;rankError='';
+  try{
+    const snap=await db.collection('scores').orderBy('score','desc').limit(RANK_MAX).get();
+    ranking=snap.docs.map(d=>({name:d.data().name,score:d.data().score,stage:d.data().stage||0}));
+  }catch(e){rankError='よみこめなかったよ（この端末の記録を表示）';loadLocalRanking();}
+  rankLoading=false;
+}
+const entryEl=document.getElementById('entry'),nameEl=document.getElementById('name');
+function runStage(){return clamp(run.allClear?8:(run.stage||stageIdx+1),1,8);}
+function openEntry(done){
+  entryDone=done;entryActive=true;
+  document.getElementById('entryTitle').textContent=db?'みんなのランキングに登録しよう！':'ランキングに登録しよう！';
+  document.getElementById('entryScore').textContent=run.score;
+  try{nameEl.value=localStorage.getItem(NAME_KEY)||'';}catch(e){nameEl.value='';}
+  entryEl.style.display='flex';
+  try{nameEl.focus();nameEl.select();}catch(e){}
+}
+function closeEntry(){entryActive=false;entryEl.style.display='none';nameEl.blur();}
+function openRanking(from,highlight){
+  rankFrom=from;lastRank=-1;
+  const it=[];
+  if(from==='gameover'){it.push({label:'もういちど',fn:()=>{run.lives=3;run.score=0;run.stage=stageIdx+1;startIntro();}},{label:'タイトルへ',fn:()=>toTitle()});}
+  else if(from==='ending')it.push({label:'タイトルへ',fn:()=>toTitle()});
+  else it.push({label:'もどる',fn:()=>toTitle()});
+  setMenu(it);setState('ranking');
+  if(highlight)return;
+  refreshRanking();
+}
+async function submitEntry(){
+  if(!entryActive)return;
+  const name=nameEl.value.trim().slice(0,8)||'ななし',entry={name,score:Math.max(0,Math.floor(run.score)),stage:runStage()},from=entryDone;
+  try{localStorage.setItem(NAME_KEY,name);}catch(e){}
+  closeEntry();
+  // 端末内にも常に残す（通信できないときの保険）
+  let local=[];try{local=JSON.parse(localStorage.getItem(RANK_KEY)||'[]');}catch(e){}
+  local.push(entry);local.sort((a,b)=>b.score-a.score);saveLocalRanking(local.slice(0,RANK_MAX));
+  openRanking(from,true);rankLoading=!!db;
+  if(db){
+    try{await db.collection('scores').add({name,score:entry.score,stage:entry.stage,createdAt:firebase.firestore.FieldValue.serverTimestamp()});}
+    catch(e){rankError='送信できなかったよ（この端末には保存したよ）';}
+    await refreshRanking();
+  }else ranking=local.slice(0,RANK_MAX);
+  lastRank=ranking.findIndex(r=>r.name===name&&r.score===entry.score);
+}
+function skipEntry(){const from=entryDone;closeEntry();openRanking(from);}
+document.getElementById('ok').addEventListener('click',submitEntry);
+document.getElementById('skip').addEventListener('click',skipEntry);
+nameEl.addEventListener('keydown',e=>{if(e.key==='Enter')submitEntry();});
+// ゲームオーバー／エンディングのあと、スコアがあれば登録をすすめる
+function offerEntry(from){if(run.score>0)openEntry(from);else openRanking(from);}
+
 function toTitle(){
   const it=[{label:'はじめから',fn:()=>newRun(0)}];
   if(save.cleared>0){it.push({label:'つづきから　STAGE '+Math.min(7,save.cleared+1),fn:()=>newRun(Math.min(6,save.cleared))});
     it.push({label:'ステージえらび',fn:()=>{selStage=Math.min(6,save.cleared);setState('select');}});}
-  setMenu(it);setState('title');Music.play(0);
+  it.push({label:'ランキング',fn:()=>openRanking('title')});
+  setMenu(it);setState('title');Music.play(0);refreshRanking();
 }
-function newRun(si){run={lives:3,score:0,fish:0};stageIdx=si;startIntro();}
+function newRun(si){run={lives:3,score:0,fish:0,stage:si+1,allClear:false};stageIdx=si;startIntro();}
 function startIntro(){setState('intro');Music.stop();introT=0;}
 function newBoss(L,S){return {x:(L.cols-11)*TS,y:GROUND*TS-44,w:64,h:44,vx:0,vy:0,dir:-1,hp:S.boss.hp,max:S.boss.hp,state:'wait',timer:1,step:0,act:'',n:0,sink:0,tx:0,hurt:0,onGround:false,hitWall:false,rot:0,t:0};}
 function startStage(si){
-  stageIdx=si;const L=genLevel(si),S=STAGES[si];
+  stageIdx=si;run.stage=Math.max(run.stage||0,si+1);const L=genLevel(si),S=STAGES[si];
   G={S,L,grid:L.grid,cols:L.cols,qc:L.qc,enemies:L.enemies,coins:L.coins,items:L.items,plats:L.plats,springs:L.springs,hazards:L.hazards,shots:[],
     p:{x:6*TS,y:GROUND*TS-26,w:24,h:26,vx:0,vy:0,face:1,onGround:false,coyote:0,jumpBuf:0,inv:0,star:0,dead:false,deadT:0,t:0,bubbleCd:0,walk:0,power:false,plat:null,sand:false},
     cam:{x:0},bubbles:[],parts:[],pops:[],bumps:[],t:0,time:TIME0,tick:0,hintB:false,bonus:0,
@@ -726,7 +829,7 @@ function updatePlay(dt){
     p.deadT+=dt;p.vy=Math.min(p.vy+GRAV*dt,MAXF);p.y+=p.vy*dt;
     if(p.deadT>1.7){
       run.lives--;
-      if(run.lives<=0){setState('gameover');setMenu([{label:'もういちど',fn:()=>{run.lives=3;run.score=0;startIntro();}},{label:'タイトルへ',fn:()=>toTitle()}]);Music.stop();}
+      if(run.lives<=0){Music.stop();setState('gameover');setMenu([]);offerEntry('gameover');}
       else respawn();
     }
   }else{
@@ -1478,8 +1581,8 @@ function drawTitle(){
   drawBeluga(W-60,264,-1,T+1,{s:.7,bow:true});
   txt('たすけて〜！',W-62,226+Math.sin(T*4)*2,11,'#fff','center','#3a5a8a',3);
   hits=[];
-  const items=menu.items,bw=230,bh=34,y0=items.length>1?170:205;
-  items.forEach((it,i)=>uiButton(it.label,W/2-bw/2,y0+i*42,bw,bh,i,it.fn));
+  const items=menu.items,bw=230,bh=31,y0=items.length>2?160:190;
+  items.forEach((it,i)=>uiButton(it.label,W/2-bw/2,y0+i*37,bw,bh,i,it.fn));
   if(save.cleared>0)txt('たすけた なかま '+save.cleared+'/7',92,178,12,'#fff','center','#123f7a',3.5);
   txt('PC：矢印キー / Z(Space)=ジャンプ / X=あわ　　スマホ：十字キー・A・B',W/2,349,10,'#dff3ff','center','rgba(10,40,80,.7)',3);
 }
@@ -1537,7 +1640,31 @@ function drawClear(){
 }
 function drawGameOver(){
   drawWorld();drawHUD();drawOverlayBox('ゲームオーバー','#ff9a9a','あきらめないで！ もういちど ちょうせん');
-  drawBeluga(W/2,250,1,T,{s:1.3});drawMenuList(276-70+0);
+  drawBeluga(W/2,250,1,T,{s:1.3});txt('スコア  '+run.score,W/2,196,17,'#ffe98a','center','#12315e',4);
+}
+const STAGE_LABEL=s=>s>=8?'ぜんクリア！':s>0?'STAGE '+s:'';
+function drawRanking(){
+  drawOcean(T);rect(0,0,W,H,'rgba(8,30,66,.5)');
+  txt(db?'みんなのランキング':'この端末のランキング',W/2,26,24,'#fff','center','#2c7ec4',6);
+  hits=[];
+  const x0=70,rw=500,y0=50,rh=24;
+  if(rankLoading)txt('よみこみ中…',W/2,190,16,'#fff','center','#12315e',4);
+  else if(!ranking.length)txt('まだ記録がありません。いちばんのりを めざそう！',W/2,180,15,'#fff','center','#12315e',4);
+  ranking.slice(0,RANK_MAX).forEach((r,i)=>{
+    const y=y0+i*rh,me=i===lastRank;
+    rrect(x0,y,rw,rh-3,9);ctx.fillStyle=me?'rgba(255,226,90,.95)':(i%2?'rgba(255,255,255,.72)':'rgba(255,255,255,.85)');ctx.fill();
+    if(me){ctx.lineWidth=3;ctx.strokeStyle='#ff9a1a';ctx.stroke();}
+    const medal=['#f2c230','#b8c2cc','#cd7f32'][i];
+    if(medal){ell(x0+22,y+(rh-3)/2,10,10,medal);txt(String(i+1),x0+22,y+(rh-3)/2+1,13,'#fff','center','rgba(0,0,0,.35)',2.5);}
+    else txt(String(i+1),x0+22,y+(rh-3)/2+1,14,'#24507f','center');
+    txt(r.name,x0+48,y+(rh-3)/2+1,15,'#24507f','left');
+    txt(STAGE_LABEL(r.stage),x0+310,y+(rh-3)/2+1,12,'#5a7896','center');
+    txt(String(r.score),x0+rw-14,y+(rh-3)/2+1,16,me?'#a04a00':'#24507f','right');
+  });
+  if(rankError)txt(rankError,W/2,y0+RANK_MAX*rh+8,11,'#ffd0d0','center','#12315e',3);
+  else if(lastRank>=0)txt('ランクイン！ '+(lastRank+1)+'位',W/2,y0+RANK_MAX*rh+8,14,'#ffe98a','center','#12315e',4);
+  const n=menu.items.length,bw=n>1?190:220,gap=16,bx=W/2-(n*bw+(n-1)*gap)/2;
+  menu.items.forEach((it,i)=>uiButton(it.label,bx+i*(bw+gap),y0+RANK_MAX*rh+24,bw,32,i,it.fn));
 }
 function drawPause(){
   drawWorld();drawHUD();drawOverlayBox('ポーズ','#fff');drawMenuList(150);
@@ -1566,6 +1693,7 @@ function updateMenuKeys(){
 }
 function update(dt){
   T+=dt;stTimer+=dt;
+  if(entryActive){Music.update();return;}   // 名前入力中はゲームを止める
   if(state==='title')updateMenuKeys();
   else if(state==='select'){
     const n=7,mx=Math.min(6,save.cleared);
@@ -1578,17 +1706,20 @@ function update(dt){
   else if(state==='intro'){introT+=dt;if(introT>.5&&(inp.p.a||introT>3.2)){startStage(stageIdx);}}
   else if(state==='play')updatePlay(dt);
   else if(state==='pause'){if(inp.p.pause){setState('play');}else updateMenuKeys();}
-  else if(state==='clear'){if(stTimer>.9&&inp.p.a){SFX.ok();if(stageIdx>=6){setState('ending');Music.play(10);}else{stageIdx++;startIntro();}}}
+  else if(state==='clear'){if(stTimer>.9&&inp.p.a){SFX.ok();if(stageIdx>=6){run.allClear=true;setState('ending');Music.play(10);}else{stageIdx++;startIntro();}}}
   else if(state==='gameover')updateMenuKeys();
-  else if(state==='ending'){if(stTimer>2&&inp.p.a)toTitle();}
+  else if(state==='ending'){if(stTimer>2&&inp.p.a)offerEntry('ending');}
+  else if(state==='ranking')updateMenuKeys();
   Music.update();
 }
 const btnBEl=document.getElementById('btnB');let btnBOff=null;
 function render(){
   const off=state==='play'&&G&&!G.p.power;if(off!==btnBOff){btnBOff=off;btnBEl.classList.toggle('off',off);}
   ctx.setTransform(scale,0,0,scale,0,0);ctx.clearRect(0,0,W,H);
-  if(state!=='title'&&state!=='select'&&state!=='pause'&&state!=='gameover')hits=[];
+  if(state!=='title'&&state!=='select'&&state!=='pause'&&state!=='gameover'&&state!=='ranking')hits=[];
+  if(state==='gameover')hits=[];
   switch(state){
+    case 'ranking':drawRanking();break;
     case 'title':drawTitle();break;
     case 'select':drawSelect();break;
     case 'intro':drawIntro();break;
@@ -1623,9 +1754,9 @@ function frame(now){
 toTitle();
 requestAnimationFrame(frame);
 /* テスト・デバッグ用フック */
-window.__beluga={inp,step(n){for(let i=0;i<n;i++){update(1/60);clearEdges();}render();},
+window.__beluga={inp,get run(){return run},get ranking(){return ranking},get entryActive(){return entryActive},submitEntry,skipEntry,step(n){for(let i=0;i<n;i++){update(1/60);clearEdges();}render();},
   setDemo(v){DEMO=v;},
-  frame(){cv.width=W;cv.height=H;scale=1;render();const d=ctx.getImageData(0,0,W,H).data;resize();return d;},get G(){return G},get state(){return state},startStage,newRun,run,save,STAGES};
+  frame(){cv.width=W;cv.height=H;scale=1;render();const d=ctx.getImageData(0,0,W,H).data;resize();return d;},get G(){return G},get state(){return state},startStage,newRun,save,STAGES};
 </script>
 </body>
 </html>
