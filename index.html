@@ -670,8 +670,9 @@ function hitBlock(c,r){
 }
 
 // 初期マリオと同じく、どんな攻撃でも1回で1機へる
+let DEMO=false; // 紹介用GIFの撮影中はやられない
 function hurtPlayer(){
-  const p=G.p;if(p.inv>0||p.star>0||p.dead||G.mode==='won')return;
+  const p=G.p;if(DEMO||p.inv>0||p.star>0||p.dead||G.mode==='won')return;
   killPlayer();
 }
 function killPlayer(){
@@ -1622,7 +1623,9 @@ function frame(now){
 toTitle();
 requestAnimationFrame(frame);
 /* テスト・デバッグ用フック */
-window.__beluga={inp,step(n){for(let i=0;i<n;i++){update(1/60);clearEdges();}render();},get G(){return G},get state(){return state},startStage,newRun,run,save,STAGES};
+window.__beluga={inp,step(n){for(let i=0;i<n;i++){update(1/60);clearEdges();}render();},
+  setDemo(v){DEMO=v;},
+  frame(){cv.width=W;cv.height=H;scale=1;render();const d=ctx.getImageData(0,0,W,H).data;resize();return d;},get G(){return G},get state(){return state},startStage,newRun,run,save,STAGES};
 </script>
 </body>
 </html>
