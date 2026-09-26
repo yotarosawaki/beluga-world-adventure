@@ -604,11 +604,13 @@ function setMenu(items){menu={items,sel:0};}
    FIREBASE_CONFIG を設定すると「みんなのランキング」（Firestore）に、
    未設定・通信できないときは、この端末だけのランキングになる。
    ===================================================================== */
+// ベルーガ防衛戦と同じ Firebase プロジェクトを共有（ランキングは別のコレクション scores_bwa）
 const FIREBASE_CONFIG={
-  apiKey:"YOUR_API_KEY",
-  authDomain:"YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:"YOUR_PROJECT_ID"
+  apiKey:"AIzaSyClphjTe780WJrcAf0zStK6dUaXun6N18Q",
+  authDomain:"beluga-defense.firebaseapp.com",
+  projectId:"beluga-defense"
 };
+const RANK_COLLECTION='scores_bwa';
 const FIREBASE_ON=!!(FIREBASE_CONFIG.apiKey&&!FIREBASE_CONFIG.apiKey.startsWith('YOUR_')&&window.firebase);
 let db=null;
 if(FIREBASE_ON){try{firebase.initializeApp(FIREBASE_CONFIG);db=firebase.firestore();}catch(e){db=null;}}
@@ -621,7 +623,7 @@ async function refreshRanking(){
   if(!db)return;
   rankLoading=true;rankError='';
   try{
-    const snap=await db.collection('scores').orderBy('score','desc').limit(RANK_MAX).get();
+    const snap=await db.collection(RANK_COLLECTION).orderBy('score','desc').limit(RANK_MAX).get();
     ranking=snap.docs.map(d=>({name:d.data().name,score:d.data().score,stage:d.data().stage||0}));
   }catch(e){rankError='よみこめなかったよ（この端末の記録を表示）';loadLocalRanking();}
   rankLoading=false;
@@ -657,7 +659,7 @@ async function submitEntry(){
   local.push(entry);local.sort((a,b)=>b.score-a.score);saveLocalRanking(local.slice(0,RANK_MAX));
   openRanking(from,true);rankLoading=!!db;
   if(db){
-    try{await db.collection('scores').add({name,score:entry.score,stage:entry.stage,createdAt:firebase.firestore.FieldValue.serverTimestamp()});}
+    try{await db.collection(RANK_COLLECTION).add({name,score:entry.score,stage:entry.stage,createdAt:firebase.firestore.FieldValue.serverTimestamp()});}
     catch(e){rankError='送信できなかったよ（この端末には保存したよ）';}
     await refreshRanking();
   }else ranking=local.slice(0,RANK_MAX);
